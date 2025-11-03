@@ -18,21 +18,38 @@ class OptionsDatabase:
         Initialize the options database
         
         Args:
-            db_path (str, optional): Path to the SQLite database. 
+            db_name (str, optional): Path to the SQLite database. 
                                     If None, creates 'options.db' in current directory.
+                                    If ':memory:', uses in-memory database.
         """
         if db_name is None:
             db_path = Path.cwd() / 'options.db'
+        elif db_name == ':memory:':
+            db_path = ':memory:'
         else:
-            db_path = Path.cwd() / db_name
+            # Handle both string paths and Path objects
+            if isinstance(db_name, (str, Path)):
+                # If it's an absolute path, use it directly
+                if str(db_name).startswith('/') or (hasattr(Path(db_name), 'is_absolute') and Path(db_name).is_absolute()):
+                    db_path = Path(db_name)
+                else:
+                    db_path = Path.cwd() / db_name
+            else:
+                db_path = Path.cwd() / str(db_name)
             
         self.db_path = db_path
         self._create_tables_if_not_exist()
         self._migrate_database()
     
+    def _get_db_path_str(self):
+        """Convert db_path to string for sqlite3.connect"""
+        if self.db_path == ':memory:':
+            return ':memory:'
+        return str(self.db_path) if isinstance(self.db_path, Path) else self.db_path
+    
     def _create_tables_if_not_exist(self):
         """Create necessary tables with flattened structure"""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self._get_db_path_str())
         cursor = conn.cursor()
         
         # Create recommendations table
@@ -112,7 +129,7 @@ class OptionsDatabase:
         and adds them if necessary.
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(self._get_db_path_str())
             cursor = conn.cursor()
             
             # Get the current columns in the orders table
@@ -181,7 +198,7 @@ class OptionsDatabase:
             int: ID of the inserted record
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(self._get_db_path_str())
             cursor = conn.cursor()
             # Extract data from order
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -282,7 +299,7 @@ class OptionsDatabase:
             bool: True if successful, False otherwise
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(self._get_db_path_str())
             cursor = conn.cursor()
             
             # Start with basic update query
@@ -291,7 +308,7 @@ class OptionsDatabase:
                 SET status = ?, executed = ?
                 WHERE id = ?
             '''
-            params = [status, executed]
+            params = [status, executed, order_id]
             
             # If we have execution details, update those fields too
             if execution_details and isinstance(execution_details, dict):
@@ -311,9 +328,8 @@ class OptionsDatabase:
                 for api_field, db_field in field_mappings.items():
                     if api_field in execution_details:
                         set_clauses.append(f"{db_field} = ?")
-                        params.append(execution_details[api_field])
+                        params.insert(-1, execution_details[api_field])  # Insert before order_id
                 
-                params.append(order_id)
                 # If we have additional fields to set, add them to the query
                 if set_clauses:
                     # Reconstruct the query with the additional fields
@@ -355,7 +371,7 @@ class OptionsDatabase:
             bool: True if successful, False otherwise
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(self._get_db_path_str())
             cursor = conn.cursor()
             
             cursor.execute('''
@@ -387,7 +403,7 @@ class OptionsDatabase:
             bool: True if update was successful, False otherwise
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(self._get_db_path_str())
             cursor = conn.cursor()
             
             # Get current order to validate it exists and check its status
@@ -446,7 +462,7 @@ class OptionsDatabase:
             dict: Order data or None if not found
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(self._get_db_path_str())
             conn.row_factory = sqlite3.Row  # This enables column access by name
             cursor = conn.cursor()
             
@@ -485,7 +501,7 @@ class OptionsDatabase:
             list: List of order dictionaries
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(self._get_db_path_str())
             conn.row_factory = sqlite3.Row  # This enables column access by name
             cursor = conn.cursor()
             
