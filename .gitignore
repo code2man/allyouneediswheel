@@ -32,3 +32,8 @@ options.db
 trades.db 
 
 connection*.json
+
+#Docs
+.docs/
+.pdf 
+.md
